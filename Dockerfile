@@ -26,9 +26,8 @@ LABEL \
   summary="Example of a spring boot microservice app running in WebSphere Liberty" \
   description="This image contains a spring boot microservice app running with the WebSphere Liberty runtime."
 
-RUN cp /opt/ibm/wlp/templates/servers/springBoot2/server.xml /config/server.xml
 
-
+COPY --chown=1001:0 ./liberty/server.xml /config/server.xml
 
 COPY --from=staging --chown=1001:0 /staging/lib.index.cache /lib.index.cache
 COPY --from=staging --chown=1001:0 /staging/thin-server.jar \
