@@ -4,27 +4,36 @@ WORKDIR /home/gradle
 COPY . .
 RUN ./gradlew assemble copyJarToServerJar --no-daemon
 
+# Stage and thin the application 
+FROM icr.io/appcafe/websphere-liberty:full-java11-openj9-ubi as staging
 
-FROM registry.access.redhat.com/ubi8/openjdk-11:1.13-1.1655306377
 
-## Uncomment the lines below to update image security content if any
-#USER root
-#RUN dnf -y update-minimal --security --sec-severity=Important --sec-severity=Critical && dnf clean all
+COPY --chown=1001:0 --from=builder /home/gradle/build/libs/server.jar \
+                    /staging/fat-server.jar
 
-USER 1001
+RUN springBootUtility thin \
+ --sourceAppPath=/staging/fat-server.jar \
+ --targetThinAppPath=/staging/thin-server.jar \
+ --targetLibCachePath=/staging/lib.index.cache
 
-COPY licenses /licenses
+# Build the image
+FROM icr.io/appcafe/websphere-liberty:full-java11-openj9-ubi
 
-LABEL name="ibm/template-java-spring" \
-      vendor="IBM" \
-      version="1.3" \
-      release="15" \
-      summary="This is an example of a container image." \
-      description="This container image will deploy a Java Spring App"
+LABEL \
+  vendor="IBM" \
+  name="inventory app" \
+  version="1.4" \
+  summary="Example of a spring boot microservice app running in WebSphere Liberty" \
+  description="This image contains a spring boot microservice app running with the WebSphere Liberty runtime."
 
-# hadolint ignore=DL3045
-COPY --from=builder /home/gradle/build/libs/server.jar server.jar
+RUN cp /opt/ibm/wlp/templates/servers/springBoot2/server.xml /config/server.xml
 
-EXPOSE 9080/tcp
 
-CMD ["java", "-jar", "server.jar"]
+
+COPY --from=staging --chown=1001:0 /staging/lib.index.cache /lib.index.cache
+COPY --from=staging --chown=1001:0 /staging/thin-server.jar \
+                    /config/dropins/spring/thin-server.jar
+
+ARG VERBOSE=true
+RUN configure.sh 
+
